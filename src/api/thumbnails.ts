@@ -4,6 +4,7 @@ import { getVideo, updateVideo } from "../db/videos";
 import type { ApiConfig } from "../config";
 import type { BunRequest } from "bun";
 import { BadRequestError, NotFoundError, UserForbiddenError } from "./errors";
+import path from "node:path";
 
 type Thumbnail = {
   data: ArrayBuffer;
@@ -30,6 +31,13 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
     throw new BadRequestError("Invalid file format");
   }
 
+  const mediaType = image.type;
+
+  if (mediaType !== "image/jpeg" && mediaType !== "image/png") {
+    throw new BadRequestError("Invalid file type. Only JPEG or PNG allowed.");
+  }
+
+
   if (image.size > MAX_UPLOAD_SIZE) {
     throw new BadRequestError("File size exceeds the maximum limit of 10MB");
   }
@@ -43,12 +51,18 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
     throw new UserForbiddenError("You are not authorized to upload a thumbnail for this video");
   }
 
-  const mediaType = image.type;
-  const arrayBuffer = await image.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
-  const bufferString = buffer.toString("base64");
-  const dataUrl = `data:${mediaType};base64,${bufferString}`;
-  videoMetadata.thumbnailURL = dataUrl;
+  const filePath = path.join(cfg.assetsRoot, `${videoId}.${image.type.split("/")[1]}`);
+  console.log("Saving thumbnail to", filePath);
+  Bun.write(filePath, await image.arrayBuffer());
+  const thumbnailURL = `http://localhost:${cfg.port}/assets/${videoId}.${image.type.split("/")[1]}`;
+  videoMetadata.thumbnailURL = thumbnailURL;
+
+  // const mediaType = image.type;
+  // const arrayBuffer = await image.arrayBuffer();
+  // const buffer = Buffer.from(arrayBuffer);
+  // const bufferString = buffer.toString("base64");
+  // const dataUrl = `data:${mediaType};base64,${bufferString}`;
+  // videoMetadata.thumbnailURL = dataUrl;
 
   updateVideo(cfg.db, videoMetadata);
 
